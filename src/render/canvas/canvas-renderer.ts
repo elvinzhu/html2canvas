@@ -44,7 +44,6 @@ import {PAINT_ORDER_LAYER} from '../../css/property-descriptors/paint-order';
 import {Renderer} from '../renderer';
 import {Context} from '../../core/context';
 import {DIRECTION} from '../../css/property-descriptors/direction';
-import InheritedStyle from './inherited-style';
 import {getLinearGradientFillStyle} from '../../css/types/functions/linear-gradient';
 
 export type RenderConfigurations = RenderOptions & {
@@ -175,7 +174,7 @@ export class CanvasRenderer extends Renderer {
         ];
     }
 
-    async renderTextNode(text: TextContainer, styles: CSSParsedDeclaration): Promise<void> {
+    async renderTextNode(text: TextContainer, styles: CSSParsedDeclaration, parent: ElementContainer): Promise<void> {
         const [font, fontFamily, fontSize] = this.createFontStyle(styles);
 
         this.ctx.font = font;
@@ -191,8 +190,8 @@ export class CanvasRenderer extends Renderer {
                 switch (paintOrderLayer) {
                     case PAINT_ORDER_LAYER.FILL:
                         //  -webkit-text-fill-color will take precedence over color if the two have different values.
-                        if (InheritedStyle.fillStyle) {
-                            this.ctx.fillStyle = InheritedStyle.fillStyle; // zyy
+                        if (parent.inheritedStyle.fillStyle) {
+                            this.ctx.fillStyle = parent.inheritedStyle.fillStyle; // zyy
                         } else {
                             this.ctx.fillStyle = asString(styles.color);
                         }
@@ -305,8 +304,20 @@ export class CanvasRenderer extends Renderer {
         const curves = paint.curves;
         const styles = container.styles;
 
+        // zyy: start 1
+        if (paint.parent?.container) {
+            Object.assign(container.inheritedStyle, paint.parent.container.inheritedStyle);
+        }
+
+        const backgroundImage = styles.backgroundImage[0];
+        if (backgroundImage && isLinearGradient(backgroundImage) && styles.backgroundClip[0] === BACKGROUND_CLIP.TEXT) {
+            const {width, height} = container.bounds;
+            container.inheritedStyle.fillStyle = getLinearGradientFillStyle(backgroundImage, width, height);
+        }
+        // zyy: end 1
+
         for (const child of container.textNodes) {
-            await this.renderTextNode(child, styles);
+            await this.renderTextNode(child, styles, container);
         }
 
         if (container instanceof ImageElementContainer) {
@@ -491,17 +502,6 @@ export class CanvasRenderer extends Renderer {
             await this.renderStack(child);
         }
 
-        // zyy: start 1
-        const styles = stack.element.container.styles;
-        const backgroundImage = styles.backgroundImage[0];
-        let hasLinearGradientFillStyle = false;
-        if (backgroundImage && isLinearGradient(backgroundImage) && styles.backgroundClip[0] === BACKGROUND_CLIP.TEXT) {
-            const {width, height} = stack.element.container.bounds;
-            InheritedStyle.fillStyle = getLinearGradientFillStyle(backgroundImage, width, height);
-            hasLinearGradientFillStyle = true;
-        }
-        // zyy: end 1
-
         // 3. For all its in-flow, non-positioned, block-level descendants in tree order:
         await this.renderNodeContent(stack.element);
 
@@ -539,10 +539,6 @@ export class CanvasRenderer extends Renderer {
         // order (smallest first) then tree order.
         for (const child of stack.positiveZIndex) {
             await this.renderStack(child);
-        }
-
-        if (hasLinearGradientFillStyle) {
-            InheritedStyle.fillStyle = undefined;
         }
     }
 

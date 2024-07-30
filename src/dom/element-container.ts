@@ -14,6 +14,9 @@ export const enum FLAGS {
 
 export class ElementContainer {
     readonly styles: CSSParsedDeclaration;
+    readonly inheritedStyle: {
+        fillStyle?: CanvasFillStrokeStyles['fillStyle'];
+    } = {};
     readonly textNodes: TextContainer[] = [];
     readonly elements: ElementContainer[] = [];
     bounds: Bounds;
