@@ -1,21 +1,22 @@
 {
     "compilerOptions": {
+        "moduleResolution": "node",
+        "module": "esnext",
         "noImplicitAny": true,
         "noImplicitThis": true,
         "noUnusedLocals": true,
         "noUnusedParameters": true,
         "strictNullChecks": true,
         "strictPropertyInitialization": true,
-        "types": ["node", "jest"],
-        "target": "es5",
-        "lib": ["es2015", "dom"],
+        "skipLibCheck": true,
+        "target": "es2015",
+        "lib": ["dom", "dom.iterable", "esnext"],
         "sourceMap": true,
         "outDir": "dist/lib",
         "declaration": true,
         "declarationDir": "dist/types",
         "resolveJsonModule": true
     },
-    "include": [
-        "src"
-    ]
+    "include": ["src"],
+    "exclude": ["src/**/__tests__/**/*", "src/**/__mocks__/**/*", "node_modules/@jest", "node_modules/jest-mock"]
 }

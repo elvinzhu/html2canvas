@@ -44,6 +44,8 @@ import {PAINT_ORDER_LAYER} from '../../css/property-descriptors/paint-order';
 import {Renderer} from '../renderer';
 import {Context} from '../../core/context';
 import {DIRECTION} from '../../css/property-descriptors/direction';
+import InheritedStyle from './inherited-style';
+import {getLinearGradientFillStyle} from '../../css/types/functions/linear-gradient';
 
 export type RenderConfigurations = RenderOptions & {
     backgroundColor: Color | null;
@@ -188,7 +190,13 @@ export class CanvasRenderer extends Renderer {
             paintOrder.forEach((paintOrderLayer) => {
                 switch (paintOrderLayer) {
                     case PAINT_ORDER_LAYER.FILL:
-                        this.ctx.fillStyle = asString(styles.color);
+                        //  -webkit-text-fill-color will take precedence over color if the two have different values.
+                        if (InheritedStyle.fillStyle) {
+                            this.ctx.fillStyle = InheritedStyle.fillStyle; // zyy
+                        } else {
+                            this.ctx.fillStyle = asString(styles.color);
+                        }
+
                         this.renderTextWithLetterSpacing(text, styles.letterSpacing, baseline);
                         const textShadows: TextShadow = styles.textShadow;
 
@@ -296,6 +304,7 @@ export class CanvasRenderer extends Renderer {
         const container = paint.container;
         const curves = paint.curves;
         const styles = container.styles;
+
         for (const child of container.textNodes) {
             await this.renderTextNode(child, styles);
         }
@@ -481,6 +490,18 @@ export class CanvasRenderer extends Renderer {
         for (const child of stack.negativeZIndex) {
             await this.renderStack(child);
         }
+
+        // zyy: start 1
+        const styles = stack.element.container.styles;
+        const backgroundImage = styles.backgroundImage[0];
+        let hasLinearGradientFillStyle = false;
+        if (backgroundImage && isLinearGradient(backgroundImage) && styles.backgroundClip[0] === BACKGROUND_CLIP.TEXT) {
+            const {width, height} = stack.element.container.bounds;
+            InheritedStyle.fillStyle = getLinearGradientFillStyle(backgroundImage, width, height);
+            hasLinearGradientFillStyle = true;
+        }
+        // zyy: end 1
+
         // 3. For all its in-flow, non-positioned, block-level descendants in tree order:
         await this.renderNodeContent(stack.element);
 
@@ -518,6 +539,10 @@ export class CanvasRenderer extends Renderer {
         // order (smallest first) then tree order.
         for (const child of stack.positiveZIndex) {
             await this.renderStack(child);
+        }
+
+        if (hasLinearGradientFillStyle) {
+            InheritedStyle.fillStyle = undefined;
         }
     }
 
@@ -693,7 +718,9 @@ export class CanvasRenderer extends Renderer {
     async renderNodeBackgroundAndBorders(paint: ElementPaint): Promise<void> {
         this.applyEffects(paint.getEffects(EffectTarget.BACKGROUND_BORDERS));
         const styles = paint.container.styles;
-        const hasBackground = !isTransparent(styles.backgroundColor) || styles.backgroundImage.length;
+        const hasBackground =
+            !isTransparent(styles.backgroundColor) ||
+            (styles.backgroundImage.length && !styles.backgroundClip.includes(BACKGROUND_CLIP.TEXT)); // zyy
 
         const borders = [
             {style: styles.borderTopStyle, color: styles.borderTopColor, width: styles.borderTopWidth},
